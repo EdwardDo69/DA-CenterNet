@@ -84,9 +84,8 @@ if __name__ == "__main__":
             batch_label = batch_data["label"]
             
             #forward
-            with torch.cuda.amp.autocast():
-                batch_output = model(batch_img)
-                loss, losses = model.compute_loss(batch_output, batch_label)
+            batch_output = model(batch_img)
+            loss, losses = model.compute_loss(batch_output, batch_label)
             
             writer.add_scalar('train/loss_offset_xy', losses[0].item(), n_iteration)
             writer.add_scalar('train/loss_wh', losses[1].item(), n_iteration)

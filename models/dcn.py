@@ -53,7 +53,5 @@ class DeformableConv2d(nn.Module):
                                           offset=offset, 
                                           weight=self.regular_conv.weight, 
                                           bias=self.regular_conv.bias, 
-                                          padding=self.padding,
-                                          mask=modulator
-                                          )
+                                          padding=self.padding)
         return x
