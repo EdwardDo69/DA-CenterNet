@@ -1,4 +1,4 @@
-from .resnet import *
+from .vgg import vgg16_bn
 from .dcn import *
 from utils import common
 
@@ -56,7 +56,7 @@ class CenterNet(nn.Module):
         self.num_classes = num_classes
         self.stride = 4
         
-        self.backbone = resnet18(pretrained=pretrained_backbone)
+        self.backbone = vgg16_bn(pretrained=pretrained_backbone)
         
         self.upsample1 = Upsamling(512, 256, ksize=4, stride=2) # 32 -> 16
         self.upsample2 = Upsamling(256, 128, ksize=4, stride=2) # 16 -> 8
