@@ -6,7 +6,7 @@ PyTorch Implementation of Domain Adaptive CenterNet([Object as Points](https://a
 
 ## Performance
 
-## On Cityscape &rarr; Cityscape Foggy
+### On Cityscape &rarr; Cityscape Foggy
 DA Faster R-CNN is with only image-level adaptation component.
 
 |Repo|  mAP    |  
