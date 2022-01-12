@@ -1,5 +1,6 @@
 from .vgg import vgg16_bn
 from .dcn import *
+from .da_heads import DomainAdaptationModule
 from utils import common
 
 import numpy as np
@@ -61,6 +62,10 @@ class CenterNet(nn.Module):
         self.upsample1 = Upsamling(512, 256, ksize=4, stride=2) # 32 -> 16
         self.upsample2 = Upsamling(256, 128, ksize=4, stride=2) # 16 -> 8
         self.upsample3 = Upsamling(128, 64, ksize=4, stride=2) #  8 -> 4
+        
+        self.da_components1 = DomainAdaptationModule(512)
+        self.da_components2 = DomainAdaptationModule(64)
+        
 
         self.cls_pred = nn.Sequential(
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
@@ -87,34 +92,38 @@ class CenterNet(nn.Module):
         self.max_pool = nn.MaxPool2d(kernel_size=7, stride=1, padding=3)
         self.max_num_dets = 100
 
-    def encode(self, x, flip=False):
+    def encode(self, x, flip=False, alpha=None):
         if flip==True:
             x = F.hflip(x)
         
         x = self.backbone(x)
         
+        da_pred1 = self.da_components1(x, alpha)
+        
         x = self.upsample1(x)
         x = self.upsample2(x)
         x = self.upsample3(x)
+        
+        da_pred2 = self.da_components2(x, alpha)
         
         cls_pred = self.cls_pred(x)
         txty_pred = self.txty_pred(x)
         twth_pred = self.twth_pred(x)
         
         out = torch.cat([txty_pred, twth_pred, cls_pred], dim=1)
-        return out 
+        return out, da_pred1, da_pred2
     
     def forward(self, x, flip=False):
         self.img_h, self.img_w = x.shape[2:]
 
-        out = self.encode(x)
+        out, da_pred1, da_pred2 = self.encode(x)
 
         if flip:
-            flipped_out = self.encode(x, flip=True)
+            flipped_out, _, _ = self.encode(x, flip=True)
             out = (out + F.hflip(flipped_out))/2.
         
         if self.training:
-            return out
+            return out, da_pred1, da_pred2
         else:
             out_h, out_w = out.shape[2:]
             device = out.device

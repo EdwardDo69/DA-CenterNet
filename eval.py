@@ -26,6 +26,7 @@ if __name__ == "__main__":
     opt = parser.parse_args()
     common.mkdir(dir="gt", remove_existing_dir=True)
     common.mkdir(dir="pred", remove_existing_dir=True)
+    common.mkdir(dir="img", remove_existing_dir=True)
     
     dataset_dict = common.parse_yaml(opt.data)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -41,7 +42,7 @@ if __name__ == "__main__":
                                         set="test",
                                         img_w=opt.img_w, 
                                         img_h=opt.img_h,
-                                        keep_ratio=True)
+                                        keep_ratio=False)
     
     test_set_loader = torch.utils.data.DataLoader(test_set, 
                                                   opt.batch_size,
@@ -53,6 +54,7 @@ if __name__ == "__main__":
         
     gt_bboxes_batch = []
     class_tp_fp_score_batch = []
+    
     with torch.no_grad():
 
         for batch_data in test_set_loader:
@@ -85,7 +87,10 @@ if __name__ == "__main__":
                 img = cv2.imread(test_set.dataset.images_path[idx])
                 
                 img_file = os.path.basename(test_set.dataset.images_path[idx])
-                txt_file = img_file.replace(".jpg", ".txt")
+                if os.path.splitext(img_file)[1] == '.jpg':
+                    txt_file = img_file.replace(".jpg", ".txt")
+                elif os.path.splitext(img_file)[1] == '.png':
+                    txt_file = img_file.replace(".png", ".txt")
                 
                 gt_txt_file = os.path.join("gt", txt_file)
                 pred_txt_file = os.path.join("pred", txt_file)
@@ -101,10 +106,11 @@ if __name__ == "__main__":
                         class_tp_fp_score = metric.measure_tpfp(pred_bboxes, target_bboxes, 0.5, bbox_format='cxcywh')
                         class_tp_fp_score_batch.append(class_tp_fp_score)
                         
+                        pred_bboxes = pred_bboxes[class_tp_fp_score[:, 1] == 1]
                         common.write_bboxes(pred_txt_file, img, pred_bboxes, dataset_dict['classes'], draw_rect=True)
                         
-                    #cv2.imshow('img', img)
-                    #cv2.waitKey(1)
+                    cv2.imwrite(os.path.join('img', img_file), img)
+                    cv2.waitKey(1)
                 
         mean_ap, ap_per_class = metric.compute_map(class_tp_fp_score_batch, gt_bboxes_batch, num_classes=model.num_classes)
         for i in range(len(dataset_dict['classes'])):
