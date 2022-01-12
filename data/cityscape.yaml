@@ -1,0 +1,4 @@
+dataset_name: "cityscape"
+root: "./dataset/Cityscape"
+classes: ["person", "rider", "car", "truck",
+          "bus", "train", "motorcycle", "bicycle"]

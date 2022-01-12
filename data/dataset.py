@@ -1,5 +1,7 @@
 from . import voc0712
 from . import coco17
+from . import cityscape
+from . import cityscape_foggy
 from . import transforms
 
 import cv2
@@ -19,7 +21,7 @@ class DetectionDataset(Dataset):  # for training/testing
                  keep_ratio=False):
         
         assert set == "train" or set == "test"
-        assert dataset_name in ["voc", "coco", "custom"]
+        assert dataset_name in ["voc", "coco", "cityscape", "cityscape_foggy", "custom"]
         
         if dataset_name == "voc":
             if set == "train":
@@ -38,6 +40,10 @@ class DetectionDataset(Dataset):  # for training/testing
                 image_set = "val2017"
             self.dataset = coco17.COCODetection(root, 
                                                 image_set)
+        elif dataset_name == "cityscape":
+            self.dataset = cityscape.CityScapeDetection(root, set)
+        elif dataset_name == "cityscape_foggy":
+            self.dataset = cityscape_foggy.CityScapeFoggyDetection(root, set)
         elif dataset_name == "custom":
             pass
         
