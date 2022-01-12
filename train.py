@@ -11,8 +11,9 @@ import os
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--step-batch-size', default=32, type=int, help='Batch size for step(optimization)')
-    parser.add_argument('--forward-batch-size', default=32, type=int, help='Batch size for forward')
+    parser.add_argument('--batch-size', default=32, type=int, help='Batch size for forward')
+    parser.add_argument('--lr', default=0.0008, type=float, help='Learning rate')
+    parser.add_argument('--milestone', default=[40], type=list, help='Milestones for learning rate scheduler')
     
     parser.add_argument('--img-w', default=512, type=int)
     parser.add_argument('--img-h', default=512, type=int)
@@ -41,28 +42,22 @@ if __name__ == "__main__":
                                             num_classes=len(dataset_dict['classes']),
                                             img_w=opt.img_w, img_h=opt.img_h,
                                             use_augmentation=True,
-                                            keep_ratio=True)
+                                            keep_ratio=False)
 
     training_set_loader = torch.utils.data.DataLoader(training_set, 
-                                                      opt.forward_batch_size,
+                                                      opt.batch_size,
                                                       num_workers=opt.num_workers,
                                                       shuffle=True,
                                                       collate_fn=dataset.collate_fn,
                                                       pin_memory=True,
                                                       drop_last=True)
 
-    iters_to_accumulate = max(round(opt.step_batch_size/opt.forward_batch_size), 1)
-    initial_lr = 5e-4 * (opt.step_batch_size/128)
-    optimizer = torch.optim.Adam(model.parameters(), lr=initial_lr)
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = 0.
+    optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr)
     
     iterations_per_epoch = len(training_set_loader)
     total_iteration =  iterations_per_epoch * opt.total_epoch
 
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_iteration)
-    warmup_iteration = 1000
-    scaler = torch.cuda.amp.GradScaler()
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opt.milestone, gamma=0.1)
     
     start_epoch = 0
     if os.path.isfile(opt.weights):
@@ -71,11 +66,12 @@ if __name__ == "__main__":
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        scaler.load_state_dict(checkpoint['scaler_state_dict'])
     
-    writer = SummaryWriter()
     for epoch in range(start_epoch, opt.total_epoch):
         model.train()
+        
+        total_loss = 0.0
+        
         for i, batch_data in enumerate(training_set_loader):
             
             n_iteration = (iterations_per_epoch * epoch) + i
@@ -86,35 +82,25 @@ if __name__ == "__main__":
             #forward
             batch_output = model(batch_img)
             loss, losses = model.compute_loss(batch_output, batch_label)
-            
-            writer.add_scalar('train/loss_offset_xy', losses[0].item(), n_iteration)
-            writer.add_scalar('train/loss_wh', losses[1].item(), n_iteration)
-            writer.add_scalar('train/loss_class_heatmap', losses[2].item(), n_iteration)
-            writer.add_scalar('train/loss', loss.item(), n_iteration)
-            writer.add_scalar('train/lr', common.get_lr(optimizer), n_iteration)
 
             #backword
-            loss = loss / iters_to_accumulate
-            scaler.scale(loss).backward()
-
-            if (n_iteration + 1) % iters_to_accumulate == 0:
-                scaler.step(optimizer)
-                scaler.update()
-                optimizer.zero_grad()
-
-            if n_iteration > warmup_iteration:
-                scheduler.step()
-            else:
-                lr = initial_lr * float(n_iteration) / warmup_iteration
-                for param_group in optimizer.param_groups:
-                    param_group['lr'] = lr
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            total_loss = loss.item()
+            
+        scheduler.step()
+        
+        total_loss = total_loss / iterations_per_epoch
+        
+        print('Epoch [{}/{}] loss={:.6f}'.format(epoch+1, opt.total_epoch, total_loss))
         
         checkpoint = {
         'epoch': epoch,# zero indexing
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict' : optimizer.state_dict(),
         'scheduler_state_dict' : scheduler.state_dict(),
-        'scaler_state_dict' : scaler.state_dict(),
         'mAP': 0.,
         'best_mAP': 0.
         }
